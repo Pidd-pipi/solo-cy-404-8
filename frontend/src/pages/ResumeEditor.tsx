@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Download, LayoutTemplate, UserRound } from 'lucide-react';
+import { Download, LayoutTemplate, ShieldCheck, UserRound } from 'lucide-react';
 import { BasicInfoPanel } from '../components/editor/BasicInfoPanel';
 import { ModuleSidebar } from '../components/editor/ModuleSidebar';
 import { Button } from '../components/common/Button';
@@ -10,6 +10,7 @@ import { ResumePreview } from '../components/preview/ResumePreview';
 import { useProfileStore } from '../stores/profile';
 import { useResumeStore } from '../stores/resume';
 import { templates } from '../stores/template';
+import { resolvePrivacyRules } from '../types/privacy';
 import { ResumeSection, ResumeSectionType } from '../types/resume';
 
 export function ResumeEditor() {
@@ -117,7 +118,16 @@ export function ResumeEditor() {
           <BasicInfoPanel value={resume.basicInfo} onChange={(patch) => updateBasicInfo(resume.id, patch)} />
           <SectionEditor resume={resume} sectionId={activeSectionId} onChange={(patch) => updateResume(resume.id, patch)} />
         </div>
-        <aside className="max-h-[calc(100vh-140px)] overflow-auto border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+        <aside className="flex max-h-[calc(100vh-140px)] flex-col gap-3 overflow-auto border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+          {resolvePrivacyRules(resume.privacy).enabled ? (
+            <Link
+              className="flex items-center gap-2 rounded-md bg-[var(--accent-soft)] px-3 py-2 text-xs font-semibold text-[var(--accent-strong)]"
+              to={`/delivery/${resume.id}`}
+            >
+              <ShieldCheck size={14} aria-hidden />
+              投递预览已脱敏，编辑表单仍为原始数据，点此管理规则
+            </Link>
+          ) : null}
           <ResumePreview resume={resume} fontSize={10} />
         </aside>
       </div>

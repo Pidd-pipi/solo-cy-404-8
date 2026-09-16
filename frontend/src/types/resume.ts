@@ -1,4 +1,5 @@
 import { Education } from './education';
+import { PrivacyRules } from './privacy';
 import { Project } from './project';
 import { Skill } from './skill';
 import { WorkExperience } from './work-experience';
@@ -34,6 +35,8 @@ export interface Resume {
   educations: Education[];
   skills: Skill[];
   projects: Project[];
+  /** 按简历独立维护的脱敏规则；缺省时按默认保护处理（旧备份兼容）。 */
+  privacy?: PrivacyRules;
 }
 
 export type ResumeCollection = Resume[];

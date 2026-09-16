@@ -1,9 +1,10 @@
-import { CSSProperties } from 'react';
+import { CSSProperties, useMemo } from 'react';
 import { useProfileStore } from '../../stores/profile';
 import { getTemplateById, ResumeTemplate } from '../../stores/template';
 import { educationLevelLabels, skillCategoryLabels, skillLevelLabels } from '../../types/enums';
 import { Resume } from '../../types/resume';
 import { formatDateRange } from '../../utils/format';
+import { buildMaskedView } from '../../utils/privacy';
 
 interface ResumePreviewProps {
   resume: Resume;
@@ -21,16 +22,11 @@ function SectionTitle({ children, accent }: { children: string; accent: string }
 
 export function ResumePreview({ resume, template = getTemplateById(resume.templateId), fontSize = 14 }: ResumePreviewProps) {
   const profile = useProfileStore((state) => state.profile);
-  const info = {
-    fullName: resume.basicInfo.fullName || profile.fullName,
-    headline: resume.basicInfo.headline || profile.headline,
-    phone: resume.basicInfo.phone || profile.phone,
-    email: resume.basicInfo.email || profile.email,
-    location: resume.basicInfo.location || profile.location,
-    website: resume.basicInfo.website || profile.website,
-    avatarUrl: resume.basicInfo.avatarUrl || profile.avatarUrl,
-  };
-  const enabledSections = resume.sections.filter((section) => section.enabled);
+  // 单一脱敏入口：仅在此处计算“遮蔽视图”，绝不写回。编辑表单不经过本组件，因此始终展示原值。
+  // 每次都从原始 resume/profile 重新派生，刷新或连续导出结果一致，遮蔽标记不会叠加。
+  const view = useMemo(() => buildMaskedView(resume, profile), [resume, profile]);
+  const info = view.basicInfo;
+  const enabledSections = view.sections.filter((section) => section.enabled);
   const style = {
     '--template-accent': template.accent,
     '--template-paper': template.paper,
@@ -47,7 +43,7 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
           return (
             <section key={section.id}>
               <SectionTitle accent={template.accent}>{section.title}</SectionTitle>
-              <p className="leading-7">{resume.summary || profile.summary}</p>
+              <p className="leading-7">{view.summary}</p>
             </section>
           );
         }
@@ -57,7 +53,7 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
             <section key={section.id}>
               <SectionTitle accent={template.accent}>{section.title}</SectionTitle>
               <div className="space-y-4">
-                {resume.workExperiences.map((item) => (
+                {view.workExperiences.map((item) => (
                   <article key={item.id}>
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -83,7 +79,7 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
             <section key={section.id}>
               <SectionTitle accent={template.accent}>{section.title}</SectionTitle>
               <div className="space-y-4">
-                {resume.projects.map((project) => (
+                {view.projects.map((project) => (
                   <article key={project.id}>
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -112,7 +108,7 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
             <section key={section.id}>
               <SectionTitle accent={template.accent}>{section.title}</SectionTitle>
               <div className="grid gap-2">
-                {resume.skills.map((skill) => (
+                {view.skills.map((skill) => (
                   <div className="grid grid-cols-[1fr_auto] items-center gap-3" key={skill.id}>
                     <div>
                       <p className="font-semibold">{skill.name}</p>
@@ -134,7 +130,7 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
           <section key={section.id}>
             <SectionTitle accent={template.accent}>{section.title}</SectionTitle>
             <div className="space-y-3">
-              {resume.educations.map((education) => (
+              {view.educations.map((education) => (
                 <article className="flex items-start justify-between gap-4" key={education.id}>
                   <div>
                     <h3 className="font-semibold">{education.school}</h3>
@@ -164,10 +160,10 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
               {info.headline}
             </p>
             <div className="mt-6 space-y-2 text-[0.9em] leading-5 opacity-80">
-              <p>{info.phone}</p>
-              <p>{info.email}</p>
-              <p>{info.location}</p>
-              <p>{info.website}</p>
+              {info.phone ? <p>{info.phone}</p> : null}
+              {info.email ? <p>{info.email}</p> : null}
+              {info.location ? <p>{info.location}</p> : null}
+              {info.website ? <p>{info.website}</p> : null}
             </div>
           </aside>
           <main>{content}</main>
@@ -189,10 +185,10 @@ export function ResumePreview({ resume, template = getTemplateById(resume.templa
           {info.avatarUrl ? <img className="h-20 w-20 object-cover" src={info.avatarUrl} alt={info.fullName} /> : null}
         </div>
         <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-[0.9em] opacity-75">
-          <span>{info.phone}</span>
-          <span>{info.email}</span>
-          <span>{info.location}</span>
-          <span>{info.website}</span>
+          {info.phone ? <span>{info.phone}</span> : null}
+          {info.email ? <span>{info.email}</span> : null}
+          {info.location ? <span>{info.location}</span> : null}
+          {info.website ? <span>{info.website}</span> : null}
         </div>
       </header>
       {content}

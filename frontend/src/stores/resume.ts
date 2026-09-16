@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { EducationLevel, SkillCategory, SkillLevel } from '../types/enums';
+import { clonePrivacyRules, ContactField, BodyTextField, MaskAction, PrivacyRules, resolvePrivacyRules } from '../types/privacy';
 import { Resume, ResumeBasicInfo, ResumeSection, ResumeSectionType } from '../types/resume';
 import { createId } from '../utils/format';
 import { readStorage, storageKeys, writeStorage } from '../utils/storage';
@@ -107,6 +108,10 @@ interface ResumeState {
   setActiveResume: (resumeId: string | null) => void;
   updateResume: (resumeId: string, patch: Partial<Resume>) => void;
   updateBasicInfo: (resumeId: string, patch: Partial<ResumeBasicInfo>) => void;
+  updatePrivacyRules: (resumeId: string, patch: Partial<PrivacyRules>) => void;
+  setContactPrivacy: (resumeId: string, field: ContactField, action: MaskAction) => void;
+  setBodyPrivacy: (resumeId: string, field: BodyTextField, action: MaskAction) => void;
+  setPrivacyEnabled: (resumeId: string, enabled: boolean) => void;
   reorderSections: (resumeId: string, sectionIds: ResumeSectionType[]) => void;
   toggleSection: (resumeId: string, sectionId: ResumeSectionType) => void;
   replaceResumes: (resumes: Resume[], activeResumeId?: string | null) => void;
@@ -138,6 +143,8 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
       title: `${source.title} 副本`,
       createdAt: now,
       updatedAt: now,
+      // 深拷贝脱敏规则，副本与源简历的规则从此各自独立。
+      privacy: source.privacy ? clonePrivacyRules(source.privacy) : undefined,
       workExperiences: source.workExperiences.map((item) => ({ ...item, id: createId('work') })),
       educations: source.educations.map((item) => ({ ...item, id: createId('edu') })),
       skills: source.skills.map((item) => ({ ...item, id: createId('skill') })),
@@ -189,6 +196,63 @@ export const useResumeStore = create<ResumeState>((set, get) => ({
             }
           : resume,
       ),
+    }));
+    persist(get());
+  },
+  // 规则整体替换（预设 / 开关场景）。缺省规则先归一化为默认保护再合并，保证旧数据可编辑。
+  updatePrivacyRules: (resumeId, patch) => {
+    set((state) => ({
+      resumes: state.resumes.map((resume) => {
+        if (resume.id !== resumeId) {
+          return resume;
+        }
+        const merged = { ...resolvePrivacyRules(resume.privacy), ...patch };
+        return { ...resume, privacy: merged, updatedAt: new Date().toISOString() };
+      }),
+    }));
+    persist(get());
+  },
+  setContactPrivacy: (resumeId, field, action) => {
+    set((state) => ({
+      resumes: state.resumes.map((resume) => {
+        if (resume.id !== resumeId) {
+          return resume;
+        }
+        const privacy = resolvePrivacyRules(resume.privacy);
+        return {
+          ...resume,
+          privacy: { ...privacy, contacts: { ...privacy.contacts, [field]: action } },
+          updatedAt: new Date().toISOString(),
+        };
+      }),
+    }));
+    persist(get());
+  },
+  setBodyPrivacy: (resumeId, field, action) => {
+    set((state) => ({
+      resumes: state.resumes.map((resume) => {
+        if (resume.id !== resumeId) {
+          return resume;
+        }
+        const privacy = resolvePrivacyRules(resume.privacy);
+        return {
+          ...resume,
+          privacy: { ...privacy, body: { ...privacy.body, [field]: action } },
+          updatedAt: new Date().toISOString(),
+        };
+      }),
+    }));
+    persist(get());
+  },
+  setPrivacyEnabled: (resumeId, enabled) => {
+    set((state) => ({
+      resumes: state.resumes.map((resume) => {
+        if (resume.id !== resumeId) {
+          return resume;
+        }
+        const privacy = resolvePrivacyRules(resume.privacy);
+        return { ...resume, privacy: { ...privacy, enabled }, updatedAt: new Date().toISOString() };
+      }),
     }));
     persist(get());
   },
