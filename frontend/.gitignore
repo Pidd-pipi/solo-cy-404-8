@@ -1,0 +1,5 @@
+
+# local-only Playwright Chromium system libs (env bootstrap, not a dependency)
+.playwright-libs/
+test-results/
+playwright-report/

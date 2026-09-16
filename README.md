@@ -35,15 +35,21 @@ npm run build
 npm run preview
 ```
 
-端到端页面测试（jsdom + Vitest，挂载真实路由/页面/store/localStorage）：
+测试均从项目入口一键运行，服务自动启动与回收，用例互相隔离、可连续重复运行；失败信息带「字段 + 阶段」。
 
 ```bash
-npm run test:e2e      # 单次运行
-npm run test:e2e:watch
-npm run typecheck:test
+npm run test:e2e            # 全部：先 DOM 测试，再真实浏览器测试（自动起停 Vite:28310）
+
+npm run test:dom            # 仅 jsdom + Vitest（tests/e2e/，真实路由/页面/store/localStorage）
+npm run test:dom:watch
+
+npm run test:browser        # 仅真实 Chromium（Playwright，tests/browser/）
+npm run test:browser:install  # 首次：下载 Chromium
 ```
 
-测试位于 `frontend/tests/e2e/`，用例各自清空存储并重置模块（等价整页刷新），可重复连续运行；`relaunchAt` 模拟“刷新重开”。
+- **DOM 测试** `frontend/tests/e2e/`：挂载真实 `createBrowserRouter` 与全部页面，逐用例清空 localStorage + 重置模块（等价整页刷新），`relaunchAt` 模拟刷新重开。
+- **真实浏览器测试** `frontend/tests/browser/`：Playwright 驱动 Chromium 访问真实 Vite 页面，覆盖中文金额（一万八千元/两万五千元）三态、出生日期附着说明的省略清理、刷新重开与复制隔离。无 root 环境下 Chromium 缺库时，`scripts/setup-browser-env.sh` 会把依赖以非 root 方式解压到 gitignored 的 `.playwright-libs/`（CI 可改用 `npx playwright install-deps chromium`）。
+- `npm run typecheck:test` 连同测试文件做类型检查。
 
 ## 技术栈
 

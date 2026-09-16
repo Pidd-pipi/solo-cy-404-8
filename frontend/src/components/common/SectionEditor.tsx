@@ -26,7 +26,12 @@ export function SectionEditor({ resume, sectionId, onChange }: SectionEditorProp
         <h2 className="font-display text-2xl font-semibold">{sectionTitle(resume, sectionId)}</h2>
         <label className="mt-5 block space-y-2 text-sm font-medium">
           <span>职业摘要</span>
-          <textarea className={textareaClass} value={resume.summary} onChange={(event) => onChange({ summary: event.target.value })} />
+          <textarea
+            aria-label="职业摘要正文"
+            className={textareaClass}
+            value={resume.summary}
+            onChange={(event) => onChange({ summary: event.target.value })}
+          />
         </label>
       </section>
     );

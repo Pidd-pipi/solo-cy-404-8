@@ -9,8 +9,12 @@
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json",
     "preview": "vite preview --host 0.0.0.0",
-    "test:e2e": "vitest run --config vitest.config.ts",
-    "test:e2e:watch": "vitest --config vitest.config.ts"
+    "test:dom": "vitest run --config vitest.config.ts",
+    "test:dom:watch": "vitest --config vitest.config.ts",
+    "test:browser": "bash scripts/setup-browser-env.sh && playwright test --config playwright.config.ts",
+    "test:browser:install": "playwright install chromium",
+    "test:browser:setup": "playwright install chromium && bash scripts/setup-browser-env.sh",
+    "test:e2e": "npm run test:dom && npm run test:browser"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.4",
@@ -25,6 +29,7 @@
     "zustand": "^5.0.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/react": "^18.3.3",
     "@types/react-beautiful-dnd": "^13.1.8",
     "@types/react-dom": "^18.3.0",
