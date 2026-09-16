@@ -151,13 +151,54 @@ const ID_BARE = new RegExp(
 //
 //	不含数字、不含句号/问号/叹号，避免跨行或跨过无关句子误命中。
 //
-// value = 金额（区间两端单位均可消费，如 30k-40k），兼容 元/千元/万/块/k/w 与 13薪/十三薪。
-const SALARY =
-  /(期望薪资|税前薪资|税后薪资|薪资范围|月薪范围|年薪范围|offer\s?薪资|月薪|年薪|薪资|薪水|工资|薪酬|待遇|到手|报价)((?:(?!\d)[：:：#()（）\-–—\s]|约|为|是|税前|税后|含|综合|人民币|RMB|CNY){0,12}?)(?<![0-9.])(\d{1,6}(?:\.\d+)?)\s*(?:万|千元|元|块|k|K|w|W)?(?:\s*[-~到至–—]\s*(\d{1,6}(?:\.\d+)?)\s*(?:万|千元|元|块|k|K|w|W)?)?(?:\/(?:月|年|小时|时|天))?(?:[，,、\s]*(?:\d{1,2}\s*薪|[一二三四五六七八九十]{1,2}薪))?/g;
+// value = 金额：阿拉伯数字或中文数字（一万八千元 / 两万五千元 / 三万 / 一万五），
+//
+//	区间两端单位均可消费（30k-40k / 一万到两万元），兼容 元/千元/万/块/k/w 与 13薪/十三薪。
+const SALARY_KW =
+  '期望薪资|税前薪资|税后薪资|薪资范围|月薪范围|年薪范围|offer\\s?薪资|月薪|年薪|薪资|薪水|工资|薪酬|待遇|到手|报价';
+const SALARY_BRIDGE = '(?:(?!\\d)[：:：#()（）\\-–—\\s]|约|为|是|税前|税后|含|综合|人民币|RMB|CNY){0,12}?';
+const CN_DIGIT_CLASS = '零〇一二两三四五六七八九';
+const CN_MAG_CLASS = '十百千万亿';
+// 贪婪消费整段中文金额：一万八千 / 两万五千 / 三万 / 一万五 / 八千，后接可选 元/块。
+const CN_TOKEN = `[${CN_DIGIT_CLASS}](?:[${CN_MAG_CLASS}][${CN_DIGIT_CLASS}]?)*`;
+const CN_AMOUNT = `${CN_TOKEN}(?:元|块)?`;
+const ARABIC_AMT = '\\d{1,6}(?:\\.\\d+)?';
+const UNIT = '万元|千元|万|千|元|块|k|K|w|W';
+// 首个金额（阿拉伯数字可带单位 / 中文金额）。
+const SALARY_VALUE = `(?:(${ARABIC_AMT})\\s*(?:${UNIT})?|(${CN_AMOUNT}))`;
+// 区间：连接符 + 另一端金额（均可带单位），避免 30k-40k 残留 -40k。
+const SALARY_RANGE = `(?:\\s*[-~到至–—]\\s*(?:${ARABIC_AMT}\\s*(?:${UNIT})?|${CN_AMOUNT}))?`;
+const SALARY_TAIL = `(?:/(?:月|年|小时|时|天))?(?:[，,、\\s]*(?:\\d{1,2}\\s*薪|[一二三四五六七八九十]{1,2}薪))?`;
+const SALARY = new RegExp(
+  `(${SALARY_KW})(${SALARY_BRIDGE})(?<![0-9.])${SALARY_VALUE}${SALARY_RANGE}${SALARY_TAIL}`,
+  'g',
+);
+// 中文金额候选必须确实含中文数字且带量级（十/百/千/万/亿），避免吞普通中文（如“五险一金”里的单字）。
+const CN_DIGIT_RE = new RegExp(`[${CN_DIGIT_CLASS}]`);
+const CN_MAG_RE = new RegExp(`[${CN_MAG_CLASS}]`);
+function isPlausibleCnAmount(s: string): boolean {
+  const t = s.trim();
+  return CN_DIGIT_RE.test(t) && CN_MAG_RE.test(t);
+}
 
-// 出生日期：关键字（长词优先）+ 可选分隔 + 年/月/日（1990-01-02 / 1990年1月2日 / 1990.01 等）。
-const BIRTH_DATE =
-  /(出生年月日|出生日期|出生时间|Date\s?of\s?Birth|生于|出生|生日|DOB)([:：#\s-]{0,4})(?<![0-9])((?:19|20)\d{2})\s*[年\-.\/]\s*(\d{1,2})\s*(?:月\s*(\d{1,2})\s*日?|[.\-\/]\s*(\d{1,2}))?(?![0-9])/gi;
+// 出生日期：关键字（长词优先）+ 可选分隔 + 年/月/日（1990-01-02 / 1990年1月2日 / 1990.01 / 1990年5月 等）。
+// “日”为可选：只有年-月（1990年5月）也整体匹配，避免省略时残留“月”。
+const BIRTH_YEAR_MONTH =
+  `((?:19|20)\\d{2})\\s*[年\\-.\\/]\\s*(\\d{1,2})(?:\\s*月(?:\\s*(\\d{1,2})\\s*日?)?|\\s*[.\\-\\/]\\s*(\\d{1,2})?)?`;
+const BIRTH_DATE = new RegExp(
+  `(出生年月日|出生日期|出生时间|Date\\s?of\\s?Birth|生于|出生|生日|DOB)([:：#\\s-]{0,4})(?<![0-9])${BIRTH_YEAR_MONTH}(?![0-9])`,
+  'gi',
+);
+
+// 出生日期后“直接附着”的核验说明（允许 0~2 个空白）：
+// - 成对括号（中/英，内容不跨句末标点）：（已核验）/ (以身份证为准)
+// - 只有左括号的残缺说明：（已核验 —— 省略时一并清掉，不留残缺括号。
+const ATTACHED_NOTE =
+  '\\s{0,2}(?:[（(][^（）()。！？!?；;\\n]{0,30}[）)]|[（(][^（）()。！？!?；;\\n]{0,30})';
+const BIRTH_DATE_OMIT = new RegExp(
+  `(出生年月日|出生日期|出生时间|Date\\s?of\\s?Birth|生于|出生|生日|DOB)([:：#\\s-]{0,4})(?<![0-9])${BIRTH_YEAR_MONTH}(?![0-9])(?:${ATTACHED_NOTE})?`,
+  'gi',
+);
 
 /**
  * 省略后清理：整段（关键字 + 分隔 + 取值）被移除后，收敛残留/相邻分隔符与悬空标点。
@@ -207,10 +248,20 @@ function maskSalary(text: string, action: MaskAction): string {
   if (action === 'keep') {
     return text;
   }
+  // g3=阿拉伯金额，g4=中文金额；中文候选必须通过量级校验，否则原样返回（避免吞普通中文）。
+  const replace = (whole: string, kw: string, sep: string, arabic: string, cn: string): string => {
+    if (cn && !arabic && !isPlausibleCnAmount(cn)) {
+      return whole;
+    }
+    if (action === 'mask') {
+      return `${kw}${sep}${SALARY_MASK}`;
+    }
+    return '';
+  };
   if (action === 'mask') {
-    return text.replace(SALARY, (_m, kw: string, sep: string) => `${kw}${sep}${SALARY_MASK}`);
+    return text.replace(SALARY, replace);
   }
-  return tidyAfterOmit(text.replace(SALARY, ''));
+  return tidyAfterOmit(text.replace(SALARY, replace));
 }
 
 function maskBirthDate(text: string, action: MaskAction): string {
@@ -218,9 +269,11 @@ function maskBirthDate(text: string, action: MaskAction): string {
     return text;
   }
   if (action === 'mask') {
+    // 遮蔽保留关键字与附着说明（如“已核验”），仅替换日期。
     return text.replace(BIRTH_DATE, (_m, kw: string, sep: string) => `${kw}${sep}${BIRTHDATE_MASK}`);
   }
-  return tidyAfterOmit(text.replace(BIRTH_DATE, ''));
+  // 省略：连同日期后直接附着的核验说明（含残缺括号）一并移除，不留残段。
+  return tidyAfterOmit(text.replace(BIRTH_DATE_OMIT, ''));
 }
 
 /**
