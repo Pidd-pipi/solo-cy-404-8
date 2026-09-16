@@ -35,6 +35,16 @@ npm run build
 npm run preview
 ```
 
+端到端页面测试（jsdom + Vitest，挂载真实路由/页面/store/localStorage）：
+
+```bash
+npm run test:e2e      # 单次运行
+npm run test:e2e:watch
+npm run typecheck:test
+```
+
+测试位于 `frontend/tests/e2e/`，用例各自清空存储并重置模块（等价整页刷新），可重复连续运行；`relaunchAt` 模拟“刷新重开”。
+
 ## 技术栈
 
 | 分类 | 技术 |

@@ -150,6 +150,7 @@ export function PrivacyConsole() {
                 </div>
               </div>
               <Switch
+                aria-label="投递脱敏保护开关"
                 checked={rules.enabled}
                 onChange={(checked) => setPrivacyEnabled(resume.id, checked)}
                 className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border border-[var(--border)] transition ${
