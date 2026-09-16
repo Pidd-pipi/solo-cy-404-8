@@ -17,6 +17,7 @@ import {
   createDefaultPrivacyRules,
   createOpenPrivacyRules,
   createStrictPrivacyRules,
+  MaskAction,
   PrivacyRules,
   resolvePrivacyRules,
 } from '../types/privacy';
@@ -30,12 +31,13 @@ import {
   resolveEffectiveContact,
 } from '../utils/privacy';
 
-const BODY_OPTIONS = ['keep', 'mask'] as const;
-
-/** 从简历所有自由文本里收集一个字段类型的真实命中，用于在规则旁展示遮蔽效果。 */
-function collectBodyHit(resume: Resume, field: BodyTextField): string | null {
+/** 从简历所有自由文本里收集一个字段类型在给定动作下的真实命中，用于在规则旁展示处理效果。 */
+function collectBodyHit(resume: Resume, field: BodyTextField, action: MaskAction): string | null {
+  if (action === 'keep') {
+    return null;
+  }
   const probe: PrivacyRules['body'] = { idNumber: 'keep', salary: 'keep', birthDate: 'keep' };
-  probe[field] = 'mask';
+  probe[field] = action;
   const candidates: string[] = [resume.summary];
   resume.workExperiences.forEach((item) => {
     candidates.push(item.position, item.companyName, ...item.responsibilities, ...item.achievements);
@@ -213,13 +215,13 @@ export function PrivacyConsole() {
           <RuleCard title="正文敏感信息">
             <p className="flex items-start gap-2 text-xs leading-5 text-[var(--muted)]">
               <FileWarning size={14} className="mt-0.5 shrink-0" aria-hidden />
-              证件号、薪资、出生日期会在摘要、工作 / 项目 / 教育等所有正文文本中自动识别并处理；识别基于关键字与号码结构，避免误伤任职日期。
+              证件号、薪资、出生日期会在摘要、工作 / 项目 / 教育等所有正文文本中自动识别：保留显示原文；遮蔽保留字段名并以星号替换；省略会把命中的整段内容（含字段名）从正文移除，不留下原值或星号。识别基于关键字与号码结构，避免误伤任职日期。
             </p>
             {bodyFieldOrder.map((field) => {
               const action = rules.body[field];
-              const hit = collectBodyHit(resume, field);
-              const maskedHit = hit
-                ? maskBodyText(hit, { idNumber: 'keep', salary: 'keep', birthDate: 'keep', [field]: 'mask' })
+              const hit = collectBodyHit(resume, field, action);
+              const processedHit = hit
+                ? maskBodyText(hit, { idNumber: 'keep', salary: 'keep', birthDate: 'keep', [field]: action })
                 : null;
               return (
                 <div className="rounded-md border border-[var(--border)] bg-[var(--bg)] p-3" key={field}>
@@ -228,13 +230,16 @@ export function PrivacyConsole() {
                     <ActionSegmented
                       ariaLabel={`${bodyFieldLabels[field]}处理方式`}
                       onChange={(next) => setBodyPrivacy(resume.id, field, next)}
-                      options={[...BODY_OPTIONS]}
                       value={action}
                     />
                   </div>
-                  {rules.enabled && action === 'mask' && hit && maskedHit ? (
+                  {rules.enabled && action !== 'keep' && hit && processedHit ? (
                     <p className="mt-2 break-all rounded bg-[var(--accent-soft)] px-2 py-1 text-xs text-[var(--accent-strong)]">
-                      示例：<span className="line-through opacity-70">{hit}</span> → {maskedHit}
+                      {action === 'omit' ? (
+                        <>省略示例：<span className="line-through opacity-70">{hit}</span> → {processedHit || '（整段移除）'}</>
+                      ) : (
+                        <>遮蔽示例：<span className="line-through opacity-70">{hit}</span> → {processedHit}</>
+                      )}
                     </p>
                   ) : null}
                 </div>

@@ -146,45 +146,83 @@ const ID_BARE = new RegExp(
   'g',
 );
 
-// 薪资：关键字（长词优先）+ 可选分隔 + 金额区间或单值；区间两端单位均可消费，避免 30k-40k 残留 -40k。
+// 薪资：关键字（长词优先）+ 可选分隔 + 金额区间或单值；区间两端单位均可消费，兼容“13 薪”等后缀，避免残留。
 const SALARY =
-  /(期望薪资|税前薪资|税后薪资|薪资范围|月薪范围|年薪范围|offer\s?薪资|月薪|年薪|薪资|薪水|工资|薪酬|待遇|到手|报价)([:：#\s-]{0,4})(?<![0-9.])(\d{1,6}(?:\.\d+)?)\s*(?:万|千元|元|块|k|K|w|W)?(?:\s*[-~到至]\s*(\d{1,6}(?:\.\d+)?)\s*(?:万|千元|元|块|k|K|w|W)?)?(?:\/(?:月|年|小时|时|天))?(?:\s*\d{1,2}\s*薪)?/g;
+  /(期望薪资|税前薪资|税后薪资|薪资范围|月薪范围|年薪范围|offer\s?薪资|月薪|年薪|薪资|薪水|工资|薪酬|待遇|到手|报价)([:：#\s-]{0,4})(?<![0-9.])(\d{1,6}(?:\.\d+)?)\s*(?:万|千元|元|块|k|K|w|W)?(?:\s*[-~到至]\s*(\d{1,6}(?:\.\d+)?)\s*(?:万|千元|元|块|k|K|w|W)?)?(?:\/(?:月|年|小时|时|天))?(?:[，,、\s]*\d{1,2}\s*薪)?/g;
 
 // 出生日期：关键字（长词优先）+ 可选分隔 + 年/月/日（1990-01-02 / 1990年1月2日 / 1990.01 等）。
 const BIRTH_DATE =
   /(出生年月日|出生日期|出生时间|Date\s?of\s?Birth|生于|出生|生日|DOB)([:：#\s-]{0,4})(?<![0-9])((?:19|20)\d{2})\s*[年\-.\/]\s*(\d{1,2})\s*(?:月\s*(\d{1,2})\s*日?|[.\-\/]\s*(\d{1,2}))?(?![0-9])/gi;
 
-function applyMaskAction(text: string, action: MaskAction, replace: () => string): string {
-  if (action === 'keep') {
-    return text;
+/**
+ * 省略后清理：整段（关键字 + 分隔 + 取值）被移除后，收敛残留/相邻分隔符与悬空标点。
+ * 纯函数且对已清理文本稳定（再跑一次结果不变），保证省略也幂等。
+ */
+const SEPARATOR_CLUSTER = /[，,、；;：:]\s*[，,、；;：:]+/g;
+function tidyAfterOmit(text: string): string {
+  let out = text;
+  // 连续分隔符收敛为一个（保留首个的风格：顿号仍为顿号，其余归一为逗号）。
+  for (let i = 0; i < 5; i += 1) {
+    const next = out.replace(SEPARATOR_CLUSTER, (match) => (match.trim().startsWith('、') ? '、' : '，'));
+    if (next === out) {
+      break;
+    }
+    out = next;
   }
-  // 'mask' 与 'omit' 在自由文本里都按遮蔽处理（无法把正文整段移除）。
-  return replace();
+  // 句首 / 空白后的悬空分隔
+  out = out.replace(/(^|[\s。！？!?])[，,、；;：:]+/g, '$1');
+  // 紧贴句末标点前的悬空分隔（经验，。→ 经验。）
+  out = out.replace(/[，,、；;：:]+\s*(?=[。！？!?])/g, '');
+  // 句尾悬空分隔（不动句末的句号）
+  out = out.replace(/[，,、；;：:]+\s*$/g, '');
+  // 句首悬空的句末标点（删除整段后遗留的孤立句号，如“。2021.06 入职”）；不含 ASCII 句点以保护日期/小数。
+  out = out.replace(/(^|\s)[。！？!?]+/g, '$1');
+  // 多余空白
+  out = out.replace(/[ \t]{2,}/g, ' ').trim();
+  return out;
 }
 
 function maskIdNumber(text: string, action: MaskAction): string {
-  return applyMaskAction(text, action, () => {
+  if (action === 'keep') {
+    return text;
+  }
+  if (action === 'mask') {
     // 关键字锚定：保留关键字本身，号码替换为纯星号标记（不重复“证件号”字样）。
-    let next = text.replace(ID_ANCHORED, (_m, kw: string, sep: string) => `${kw}${sep}${GENERIC_MASK}`);
-    // 无关键字的裸身份证：补一个语义标签，便于阅读。
-    next = next.replace(ID_BARE, ID_MASK);
-    return next;
-  });
+    const masked = text
+      .replace(ID_ANCHORED, (_m, kw: string, sep: string) => `${kw}${sep}${GENERIC_MASK}`)
+      // 无关键字的裸身份证：补一个语义标签，便于阅读。
+      .replace(ID_BARE, ID_MASK);
+    return masked;
+  }
+  // 省略：锚定命中整段（关键字 + 分隔 + 号码）移除；裸号移除号码本身。不留原值或星号。
+  return tidyAfterOmit(text.replace(ID_ANCHORED, '').replace(ID_BARE, ''));
 }
 
 function maskSalary(text: string, action: MaskAction): string {
-  return applyMaskAction(text, action, () =>
-    text.replace(SALARY, (m, kw: string, sep: string) => `${kw}${sep}${SALARY_MASK}`),
-  );
+  if (action === 'keep') {
+    return text;
+  }
+  if (action === 'mask') {
+    return text.replace(SALARY, (_m, kw: string, sep: string) => `${kw}${sep}${SALARY_MASK}`);
+  }
+  return tidyAfterOmit(text.replace(SALARY, ''));
 }
 
 function maskBirthDate(text: string, action: MaskAction): string {
-  return applyMaskAction(text, action, () =>
-    text.replace(BIRTH_DATE, (m, kw: string, sep: string) => `${kw}${sep}${BIRTHDATE_MASK}`),
-  );
+  if (action === 'keep') {
+    return text;
+  }
+  if (action === 'mask') {
+    return text.replace(BIRTH_DATE, (_m, kw: string, sep: string) => `${kw}${sep}${BIRTHDATE_MASK}`);
+  }
+  return tidyAfterOmit(text.replace(BIRTH_DATE, ''));
 }
 
-/** 按顺序套用全部正文规则；每一步都只消费数字/日期字符，因此组合后仍幂等。 */
+/**
+ * 按顺序套用全部正文规则；
+ * - keep：原文不动；mask：保留关键字、号码替换为星号；omit：整段移除并清理标点。
+ * 每一步的替换都不引入可被其它规则再次命中的数字/关键字，因此组合与重复执行均幂等。
+ */
 export function maskBodyText(text: string, body: Record<BodyTextField, MaskAction>): string {
   const source = String(text ?? '');
   if (!source) {
@@ -252,7 +290,8 @@ function maskLines(lines: string[] | undefined, body: Record<BodyTextField, Mask
   if (!Array.isArray(lines)) {
     return [];
   }
-  return lines.map((line) => maskBodyText(line, body));
+  // 省略把整条命中（如单独一行的“身份证号…”）清空时，整行移除，不留下空项目或星号。
+  return lines.map((line) => maskBodyText(line, body)).filter((line) => line.trim().length > 0);
 }
 
 /**
